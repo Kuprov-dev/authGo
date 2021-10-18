@@ -4,6 +4,7 @@ import "auth_service/pkg/models"
 
 type UserDAO interface {
 	GetByUsername(username string) *models.User
+	UpdateRefreshToken(username string, refreshToken string) *models.User
 }
 
 var Users map[string]models.User
