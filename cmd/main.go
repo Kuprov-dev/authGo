@@ -13,7 +13,7 @@ func main() {
 
 	http.HandleFunc("/login", auth.SignInHandler(config))
 	http.HandleFunc("/logout", auth.SignOutHandler(config))
-	http.HandleFunc("/test", auth.Test)
+	http.HandleFunc("/test", auth.Test(config))
 
 	fmt.Println("Starting server")
 	log.Fatal(http.ListenAndServe("localhost:8000", nil))

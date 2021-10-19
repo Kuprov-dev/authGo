@@ -19,26 +19,27 @@ func makeInternalServerErrorResponse(w *http.ResponseWriter) {
 	(*w).WriteHeader(http.StatusInternalServerError)
 }
 
+// Контроллер логина, конфиг инжектится
 func SignInHandler(config *conf.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username, password, _ := r.BasicAuth()
 
 		userDAO := db.InMemroyUserDAO{}
-		ok := checkUserPassowrd(username, password, &userDAO)
+		ok := checkUserPassowrd(username, password, &userDAO, config)
 
 		if !ok {
 			makeUnauthorisedResponse(&w)
 			return
 		}
 
-		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, password, config)
+		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, password, config.SecretKeyAccess)
 
 		if err != nil {
 			fmt.Println(accessToken, err)
 			makeInternalServerErrorResponse(&w)
 		}
 
-		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, password, config)
+		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, password, config.SecretKeyRefresh)
 		if err != nil {
 			fmt.Println(refreshToken, err)
 			makeInternalServerErrorResponse(&w)
@@ -51,16 +52,15 @@ func SignInHandler(config *conf.Config) http.HandlerFunc {
 			Value:   accessToken,
 			Expires: accessExpirationTime,
 		})
-
 		http.SetCookie(w, &http.Cookie{
 			Name:    "Refresh",
 			Value:   refreshToken,
 			Expires: refreshExpirationTime,
 		})
-
 	}
 }
 
+// Контроллер логаута, конфиг инжектится
 func SignOutHandler(config *conf.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
@@ -82,14 +82,16 @@ func SignOutHandler(config *conf.Config) http.HandlerFunc {
 	}
 }
 
+// Тестовый хендлер чтоб посмотреть в хедеры
 func hello(w http.ResponseWriter, r *http.Request) {
-	// Тестовый хендлер чтоб посмотреть в хедеры
 	fmt.Println("hello")
 }
 
-func Test(w http.ResponseWriter, r *http.Request) {
-	// Тестовая ручка чтоб посмотреть в хедеры и заюзать мидлварь
-	fmt.Println("MIDDLEWARE!")
-	next := CheckRefreshToken(hello)
-	next.ServeHTTP(w, r)
+// Тестовая ручка чтоб посмотреть в хедеры и заюзать мидлварь
+func Test(config *conf.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("MIDDLEWARE!")
+		next := CheckRefreshToken(hello, config)
+		next.ServeHTTP(w, r)
+	}
 }
