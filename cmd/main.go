@@ -17,14 +17,6 @@ func main() {
 	PORT := ":8080"
 
 	mux := http.NewServeMux()
-	s := &http.Server{
-		Addr:         PORT,
-		Handler:      mux,
-		IdleTimeout:  10 * time.Second,
-		ReadTimeout:  time.Second,
-		WriteTimeout: time.Second,
-	}
-	defer s.Close()
 
 	fmt.Println("Server started...")
 
@@ -39,6 +31,16 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT,
 	)
+
+	handler := auth.Logging(mux)
+	s := &http.Server{
+		Addr:         PORT,
+		Handler:      handler,
+		IdleTimeout:  10 * time.Second,
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	}
+	defer s.Close()
 
 	go func() {
 		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
