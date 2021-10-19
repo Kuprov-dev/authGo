@@ -52,7 +52,7 @@ func main() {
 
 	go func() {
 		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 	}()
