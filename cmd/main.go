@@ -4,6 +4,7 @@ import (
 	"auth_service/pkg/auth"
 	"auth_service/pkg/conf"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,13 @@ func main() {
 	config := conf.New()
 
 	PORT := ":8080"
+
+	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.SetOutput(file)
 
 	mux := http.NewServeMux()
 
