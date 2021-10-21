@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,12 +26,20 @@ func main() {
 	log.SetOutput(file)
 
 	mux := http.NewServeMux()
+	pprofMux := http.DefaultServeMux
 
 	fmt.Println("Server started...")
 
 	mux.Handle("/login", auth.SignInHandler(config))
 	mux.Handle("/logout", auth.SignOutHandler(config))
 	mux.Handle("/test", http.HandlerFunc(auth.Test))
+
+	// Регистрация pprof-обработчиков
+	pprofMux.HandleFunc("/debug/pprof/", pprof.Index)
+	pprofMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	pprofMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	pprofMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop,
@@ -49,6 +58,11 @@ func main() {
 		WriteTimeout: time.Second,
 	}
 	defer s.Close()
+
+	// Pprof server.
+	go func() {
+		log.Println(http.ListenAndServe("localhost:8081", pprofMux))
+	}()
 
 	go func() {
 		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
