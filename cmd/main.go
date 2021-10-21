@@ -6,15 +6,58 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
 	config := conf.New()
 
-	http.HandleFunc("/login", auth.SignInHandler(config))
-	http.HandleFunc("/logout", auth.SignOutHandler(config))
-	http.HandleFunc("/test", auth.Test(config))
+	PORT := ":8080"
 
-	fmt.Println("Starting server")
-	log.Fatal(http.ListenAndServe("localhost:8000", nil))
+	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.SetOutput(file)
+
+	mux := http.NewServeMux()
+
+	fmt.Println("Server started...")
+
+	mux.Handle("/login", auth.SignInHandler(config))
+	mux.Handle("/logout", auth.SignOutHandler(config))
+	mux.Handle("/i", auth.Test(config))
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT,
+	)
+
+	handler := auth.Logging(mux)
+	s := &http.Server{
+		Addr:         PORT,
+		Handler:      handler,
+		IdleTimeout:  10 * time.Second,
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	}
+	defer s.Close()
+
+	go func() {
+		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Println(err)
+			return
+		}
+	}()
+
+	<-stop
+
+	fmt.Println("Server stopped...")
 }
