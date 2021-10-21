@@ -3,30 +3,28 @@ package main
 import (
 	"auth_service/pkg/auth"
 	"auth_service/pkg/conf"
+	logging "auth_service/pkg/logging"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
+
+const PORT string = ":8080"
 
 func main() {
 	config := conf.New()
 
-	PORT := ":8080"
-
-	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.SetOutput(file)
+	log := logrus.New()
+	log.SetFormatter(&logrus.JSONFormatter{})
+	logEntry := logrus.NewEntry(log)
 
 	mux := http.NewServeMux()
-	pprofMux := http.DefaultServeMux
 
 	fmt.Println("Server started...")
 
@@ -34,12 +32,11 @@ func main() {
 	mux.Handle("/logout", auth.SignOutHandler(config))
 	mux.Handle("/test", http.HandlerFunc(auth.Test))
 
-	// Регистрация pprof-обработчиков
-	pprofMux.HandleFunc("/debug/pprof/", pprof.Index)
-	pprofMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	pprofMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	pprofMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop,
@@ -49,7 +46,7 @@ func main() {
 		syscall.SIGQUIT,
 	)
 
-	handler := auth.Logging(mux)
+	handler := logging.LoggingMiddleware(logEntry)(mux)
 	s := &http.Server{
 		Addr:         PORT,
 		Handler:      handler,
@@ -58,11 +55,6 @@ func main() {
 		WriteTimeout: time.Second,
 	}
 	defer s.Close()
-
-	// Pprof server.
-	go func() {
-		log.Println(http.ListenAndServe("localhost:8081", pprofMux))
-	}()
 
 	go func() {
 		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
