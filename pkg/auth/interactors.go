@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"auth_service/pkg/conf"
 	"auth_service/pkg/db"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -17,7 +17,7 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func checkUserPassowrd(username, password string) bool {
+func checkUserPassowrd(username, password string, userRepo db.UserDAO) bool {
 	user := userRepo.GetByUsername(username)
 	if user == nil {
 		return false
