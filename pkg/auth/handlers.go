@@ -42,7 +42,7 @@ func SignInHandler(config *conf.Config) http.HandlerFunc {
 		password := creds.Password
 
 		userDAO := db.InMemroyUserDAO{}
-		ok := checkUserPassowrd(username, password, &userDAO, config)
+		ok := checkUserPassowrd(username, password, &userDAO)
 
 		if !ok {
 			makeUnauthorisedResponse(&w)
