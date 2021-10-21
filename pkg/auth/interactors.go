@@ -2,7 +2,6 @@ package auth
 
 import (
 	"auth_service/pkg/db"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
