@@ -1,50 +1,69 @@
 package jwt
 
 import (
-	"auth_service/pkg/conf"
 	"time"
 
 	"github.com/golang-jwt/jwt"
 )
+
+type TokenCreatorFunc func(string, string, string) (string, time.Time, error)
 
 type Claims struct {
 	Username string
 	jwt.StandardClaims
 }
 
-func CreateAccessToken(username string, password string, config *conf.Config) (string, time.Time, error) {
-	expirationTime := time.Now().Add(1 * time.Minute)
+// фабрика по произвоству ф-ций генераторов токена
+func createToken(expirationTime time.Time) TokenCreatorFunc {
+	return func(username, password, secretKey string) (string, time.Time, error) {
+		claims := &Claims{
+			Username: username,
+			StandardClaims: jwt.StandardClaims{
+				ExpiresAt: expirationTime.Unix(),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, err := token.SignedString([]byte(secretKey))
+		if err != nil {
+			return "", time.Time{}, err
+		}
 
-	claims := &Claims{
-		Username: username,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expirationTime.Unix(),
-		},
+		return tokenString, expirationTime, nil
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(config.SecretKey))
-	if err != nil {
-		return "", time.Time{}, err
-	}
-
-	return tokenString, expirationTime, nil
 }
 
-func CreateRefreshToken(username string, password string, config *conf.Config) (string, time.Time, error) {
-	expirationTime := time.Now().Add(1 * time.Hour)
+var CreateAccessToken TokenCreatorFunc
+var CreateRefreshToken TokenCreatorFunc
 
-	claims := &Claims{
-		Username: username,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expirationTime.Unix(),
-		},
-	}
+func init() {
+	accessExpirationTime := time.Now().Add(1 * time.Minute)
+	refreshExpirationTime := time.Now().Add(1 * time.Hour)
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(config.SecretKey))
+	CreateAccessToken = createToken(accessExpirationTime)
+	CreateRefreshToken = createToken(refreshExpirationTime)
+}
+
+func TokenIsExpired(tokenStr string, secretKey string, resfresh bool) (bool, error, string) {
+	claims := &Claims{}
+
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secretKey), nil
+	})
+
 	if err != nil {
-		return "", time.Time{}, err
+		return false, err, claims.Username
 	}
-
-	return tokenString, expirationTime, nil
+	if !token.Valid {
+		return false, err, claims.Username
+	}
+	if resfresh == true {
+		if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) < 60*time.Minute {
+			return false, nil, claims.Username
+		}
+	} else {
+		if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) < 5*time.Minute {
+			return false, nil, claims.Username
+		}
+	}
+	return true, nil, claims.Username
 }

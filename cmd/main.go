@@ -5,14 +5,13 @@ import (
 	"auth_service/pkg/conf"
 	logging "auth_service/pkg/logging"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 const PORT string = ":8080"
