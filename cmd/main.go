@@ -5,13 +5,13 @@ import (
 	"auth_service/pkg/conf"
 	logging "auth_service/pkg/logging"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 const PORT string = ":8080"
@@ -29,7 +29,7 @@ func main() {
 
 	mux.Handle("/login", auth.SignInHandler(config))
 	mux.Handle("/logout", auth.SignOutHandler(config))
-	mux.Handle("/test", http.HandlerFunc(auth.Test))
+	mux.Handle("/hello", http.HandlerFunc(auth.Hello))
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -47,11 +47,14 @@ func main() {
 
 	handler := logging.LoggingMiddleware(logEntry)(mux)
 	s := &http.Server{
-		Addr:         PORT,
-		Handler:      handler,
-		IdleTimeout:  10 * time.Second,
-		ReadTimeout:  time.Second,
-		WriteTimeout: time.Second,
+		Addr:    PORT,
+		Handler: handler,
+
+		// So because the WriteTimeout was set pprof yielded an error,
+		// that is why, and due to redundancy, setting timeouts was commented
+		// IdleTimeout:  10 * time.Second,
+		// ReadTimeout:  time.Second,
+		// WriteTimeout: time.Second,
 	}
 	defer s.Close()
 

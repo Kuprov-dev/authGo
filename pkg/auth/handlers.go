@@ -104,7 +104,7 @@ func SignOutHandler(config *conf.Config) http.HandlerFunc {
 }
 
 // Тестовый хендлер чтоб посмотреть в хедеры
-func hello(w http.ResponseWriter, r *http.Request) {
+func Hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("hello")
 }
 
@@ -112,7 +112,7 @@ func hello(w http.ResponseWriter, r *http.Request) {
 func Test(config *conf.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("MIDDLEWARE!")
-		next := CheckRefreshToken(hello, config)
+		next := CheckRefreshToken(Hello, config)
 		next.ServeHTTP(w, r)
 	}
 }
