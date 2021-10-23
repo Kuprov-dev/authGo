@@ -116,3 +116,14 @@ func Test(config *conf.Config) http.HandlerFunc {
 		next.ServeHTTP(w, r)
 	}
 }
+
+func ValidateTokenHandler(config *conf.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		middleware := jwt.ValidateTokenMiddleware(config)
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("hello"))
+		}
+		next := middleware(http.HandlerFunc(handler))
+		next.ServeHTTP(w, r)
+	}
+}
