@@ -44,8 +44,9 @@ func ValidateTokenMiddleware(next http.HandlerFunc) http.HandlerFunc {
 					return []byte(secretKey), nil
 				})
 
-				if error != nil {
-					json.NewEncoder(w).Encode(ErrorMsg{Message: error.Error()})
+				if err != nil {
+					// json.NewEncoder(w).Encode(ErrorMsg{Message: error.Error()})
+					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
 
@@ -60,12 +61,15 @@ func ValidateTokenMiddleware(next http.HandlerFunc) http.HandlerFunc {
 					next(w, req)
 				} else {
 					json.NewEncoder(w).Encode(ErrorMsg{Message: "Invalid authorization token"})
+					w.WriteHeader(http.StatusUnauthorized)
 				}
 			} else {
 				json.NewEncoder(w).Encode(ErrorMsg{Message: "Invalid authorization token"})
+				w.WriteHeader(http.StatusUnauthorized)
 			}
 		} else {
 			json.NewEncoder(w).Encode(ErrorMsg{Message: "An authorization header is required"})
+			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
 }
