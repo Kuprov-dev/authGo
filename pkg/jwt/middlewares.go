@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"auth_service/"
+
 	"github.com/golang-jwt/jwt"
-	"github.com/mitchellh/mapstructure"
 )
 
 type ErrorMsg struct {
@@ -36,16 +37,10 @@ func ValidateTokenMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				if token.Valid {
 
 					var user User
-					mapstructure.Decode(token.Claims, &user)
+					type UserKey string
+					var userKey UserKey = "user"
 
-					vars := mux.Vars(req)
-					name := vars["userId"]
-					if name != user.Username {
-						json.NewEncoder(w).Encode(ErrorMsg{Message: "Invalid authorization token - Does not match UserID"})
-						return
-					}
-
-					context.Set(req, "decoded", token.Claims)
+					ctx := context.WithValue(r.Context(), userKey, user)
 					next(w, req)
 				} else {
 					json.NewEncoder(w).Encode(ErrorMsg{Message: "Invalid authorization token"})
