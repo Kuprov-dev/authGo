@@ -5,10 +5,8 @@ import (
 	"auth_service/pkg/db"
 	"auth_service/pkg/jwt"
 	"fmt"
-	"log"
 	"net/http"
 	"reflect"
-	"time"
 )
 
 // мидлварь чтобы чекать живость refresh токена,
@@ -74,12 +72,5 @@ func CheckRefreshToken(next http.HandlerFunc, config *conf.Config) http.HandlerF
 
 		fmt.Println(ok1, ok2, reflect.TypeOf(err1), reflect.TypeOf(err2), err1, err2)
 		next.ServeHTTP(w, r)
-	})
-}
-func Logging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, req)
-		log.Printf("%s %s %s", req.Method, req.RequestURI, time.Since(start))
 	})
 }
