@@ -5,3 +5,11 @@ type User struct {
 	Password     string
 	RefreshToken string
 }
+
+
+
+type UserCredentials struct {
+	Username string `json:"username"`
+	AccessToken string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}

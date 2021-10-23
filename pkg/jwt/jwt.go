@@ -1,7 +1,6 @@
 package jwt
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt"
@@ -44,7 +43,7 @@ func init() {
 	CreateRefreshToken = createToken(refreshExpirationTime)
 }
 
-func TokenIsExpired(tokenStr string, secretKey string) (bool, error) {
+func TokenIsExpired(tokenStr string, secretKey string, resfresh bool) (bool, error, string) {
 	claims := &Claims{}
 
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
@@ -52,9 +51,19 @@ func TokenIsExpired(tokenStr string, secretKey string) (bool, error) {
 	})
 
 	if err != nil {
-		return false, err
+		return false, err, claims.Username
 	}
-
-	fmt.Println(token)
-	return true, nil
+	if !token.Valid {
+		return false, err, claims.Username
+	}
+	if resfresh == true {
+		if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) < 60*time.Minute {
+			return false, nil, claims.Username
+		}
+	} else {
+		if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) < 5*time.Minute {
+			return false, nil, claims.Username
+		}
+	}
+	return true, nil, claims.Username
 }

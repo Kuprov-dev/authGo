@@ -4,10 +4,16 @@ import (
 	"auth_service/pkg/conf"
 	"auth_service/pkg/db"
 	"auth_service/pkg/jwt"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 )
+
+type Credentials struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
 
 func makeUnauthorisedResponse(w *http.ResponseWriter) {
 	(*w).Header().Set("WWW-Authenticate", "Basic realm=auth")
@@ -18,14 +24,25 @@ func makeUnauthorisedResponse(w *http.ResponseWriter) {
 func makeInternalServerErrorResponse(w *http.ResponseWriter) {
 	(*w).WriteHeader(http.StatusInternalServerError)
 }
+func makeBadRequestResponse(w *http.ResponseWriter) {
+	(*w).WriteHeader(http.StatusBadRequest)
+}
 
 // Контроллер логина, конфиг инжектится
 func SignInHandler(config *conf.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		username, password, _ := r.BasicAuth()
+		var creds Credentials
+		err := json.NewDecoder(r.Body).Decode(&creds)
+		if err != nil {
+			//
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		username := creds.Username
+		password := creds.Password
 
 		userDAO := db.InMemroyUserDAO{}
-		ok := checkUserPassowrd(username, password, &userDAO, config)
+		ok := checkUserPassowrd(username, password, &userDAO)
 
 		if !ok {
 			makeUnauthorisedResponse(&w)
@@ -48,14 +65,18 @@ func SignInHandler(config *conf.Config) http.HandlerFunc {
 		userDAO.UpdateRefreshToken(username, refreshToken)
 
 		http.SetCookie(w, &http.Cookie{
-			Name:    "Token",
-			Value:   accessToken,
-			Expires: accessExpirationTime,
+			Name:     "Access",
+			Value:    accessToken,
+			Path:     "/",
+			Expires:  accessExpirationTime,
+			HttpOnly: true,
 		})
 		http.SetCookie(w, &http.Cookie{
-			Name:    "Refresh",
-			Value:   refreshToken,
-			Expires: refreshExpirationTime,
+			Name:     "Refresh",
+			Value:    refreshToken,
+			Path:     "/",
+			Expires:  refreshExpirationTime,
+			HttpOnly: true,
 		})
 	}
 }
@@ -83,7 +104,7 @@ func SignOutHandler(config *conf.Config) http.HandlerFunc {
 }
 
 // Тестовый хендлер чтоб посмотреть в хедеры
-func hello(w http.ResponseWriter, r *http.Request) {
+func Hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("hello")
 }
 
@@ -91,7 +112,18 @@ func hello(w http.ResponseWriter, r *http.Request) {
 func Test(config *conf.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("MIDDLEWARE!")
-		next := CheckRefreshToken(hello, config)
+		next := CheckRefreshToken(Hello, config)
+		next.ServeHTTP(w, r)
+	}
+}
+
+func ValidateTokenHandler(config *conf.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		middleware := jwt.ValidateTokenMiddleware(config)
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("hello"))
+		}
+		next := middleware(http.HandlerFunc(handler))
 		next.ServeHTTP(w, r)
 	}
 }

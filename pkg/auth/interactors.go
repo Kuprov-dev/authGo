@@ -1,19 +1,31 @@
 package auth
 
 import (
-	"auth_service/pkg/conf"
 	"auth_service/pkg/db"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // for futher implementation
-func hashPassword(password string, config *conf.Config) string {
-	return password
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	return string(bytes), err
 }
 
-func checkUserPassowrd(username, password string, userRepo db.UserDAO, config *conf.Config) bool {
+func CheckPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+func checkUserPassowrd(username, password string, userRepo db.UserDAO) bool {
 	user := userRepo.GetByUsername(username)
 	if user == nil {
 		return false
 	}
-	return user.Password == hashPassword(password, config)
+	hash, err := HashPassword(password)
+	if err != nil {
+		return false
+	}
+	isCorrectPassword := CheckPasswordHash(user.Password, hash)
+	return isCorrectPassword
 }
