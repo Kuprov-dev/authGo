@@ -30,7 +30,7 @@ func main() {
 	mux.Handle("/login", auth.SignInHandler(config))
 	mux.Handle("/logout", auth.SignOutHandler(config))
 	mux.Handle("/hello", http.HandlerFunc(auth.Hello))
-	mux.Handle("/me", auth.ValidateTokenHandler(config))
+	mux.Handle("/i", auth.ValidateTokenHeadersHandler(config))
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)

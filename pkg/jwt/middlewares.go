@@ -6,20 +6,18 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"auth_service/pkg/conf"
+	"auth_service/pkg/errors"
 	"auth_service/pkg/models"
 
 	"github.com/golang-jwt/jwt"
 )
 
-type ErrorMsg struct {
-	Message string `json:"message"`
-}
+type ContextKey string
 
-type UserKey string
-
-var userKey UserKey = "user"
+var ContextUserKey ContextKey = "user"
 
 // TODO: Access user through user interface + pass user data in ctx <23-10-21, ddbelyaev> //
 // This is a JWT validating middleware. It's purpose is to validate JWT before allowing users
@@ -29,6 +27,8 @@ func ValidateTokenMiddleware(config *conf.Config) func(http.Handler) http.Handle
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			authorizationHeader := req.Header.Get("Access")
 			refreshHeader := req.Header.Get("Refresh")
+
+			fmt.Println(authorizationHeader, refreshHeader)
 
 			if authorizationHeader != "" {
 				bearerToken := strings.Split(authorizationHeader, " ")
@@ -41,11 +41,6 @@ func ValidateTokenMiddleware(config *conf.Config) func(http.Handler) http.Handle
 						return []byte(config.SecretKeyAccess), nil
 					})
 
-					if err != nil {
-						w.WriteHeader(http.StatusBadRequest)
-						return
-					}
-
 					if token.Valid {
 						var userCreds models.UserCredentials
 
@@ -53,20 +48,36 @@ func ValidateTokenMiddleware(config *conf.Config) func(http.Handler) http.Handle
 						userCreds.AccessToken = authorizationHeader
 						userCreds.RefreshToken = refreshHeader
 
-						ctx := context.WithValue(req.Context(), userKey, userCreds)
+						ctx := context.WithValue(req.Context(), ContextUserKey, userCreds)
 						next.ServeHTTP(w, req.WithContext(ctx))
-					} else {
-						json.NewEncoder(w).Encode(ErrorMsg{Message: "Invalid authorization token"})
-						w.Header().Set("Content-Type", "application/json")
-						w.WriteHeader(http.StatusUnauthorized)
+					} else if ve, ok := err.(*jwt.ValidationError); ok {
+						if ve.Errors&jwt.ValidationErrorMalformed != 0 {
+							fmt.Println("That's not even a token")
+							json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
+							w.Header().Set("Content-Type", "application/json")
+							w.WriteHeader(http.StatusUnauthorized)
+						} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
+							fmt.Println("Timing is everything", time.Unix(claims.ExpiresAt, 0))
+							json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
+							w.Header().Set("Content-Type", "application/json")
+							w.WriteHeader(http.StatusUnauthorized)
+						} else {
+							fmt.Println("Couldn't handle this token:", err)
+							json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
+							w.Header().Set("Content-Type", "application/json")
+							w.WriteHeader(http.StatusUnauthorized)
+						}
+						// json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
+						// w.Header().Set("Content-Type", "application/json")
+						// w.WriteHeader(http.StatusUnauthorized)
 					}
 				} else {
-					json.NewEncoder(w).Encode(ErrorMsg{Message: "Invalid authorization token"})
+					json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
 				}
 			} else {
-				json.NewEncoder(w).Encode(ErrorMsg{Message: "An authorization header is required"})
+				json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "An authorization header is required"})
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 			}
