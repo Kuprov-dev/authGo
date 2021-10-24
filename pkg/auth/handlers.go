@@ -32,21 +32,20 @@ func SignInHandler(config *conf.Config) http.HandlerFunc {
 		ok := checkUserPassowrd(username, password, &userDAO)
 
 		if !ok {
-			errors.MakeUnathorisedErrorResponse(&w)
+			errors.MakeUnathorisedErrorResponse(&w, "")
 			return
 		}
 
-		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, password, config.SecretKeyAccess)
+		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, config.SecretKeyAccess)
 
 		if err != nil {
-			fmt.Println(accessToken, err)
-			errors.MakeInternalServerErrorResponse(&w)
+			errors.MakeInternalServerErrorResponse(&w, "")
 		}
 
-		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, password, config.SecretKeyRefresh)
+		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, config.SecretKeyRefresh)
 		if err != nil {
 			fmt.Println(refreshToken, err)
-			errors.MakeInternalServerErrorResponse(&w)
+			errors.MakeInternalServerErrorResponse(&w, "")
 		}
 
 		userDAO.UpdateRefreshToken(username, refreshToken)
@@ -104,9 +103,9 @@ func Test(config *conf.Config) http.HandlerFunc {
 	}
 }
 
-func ValidateTokenHeadersHandler(config *conf.Config) http.HandlerFunc {
+func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		middleware := jwt.ValidateTokenMiddleware(config)
+		middleware := jwt.ValidateTokenMiddleware(config, userDAO)
 		handler := func(w http.ResponseWriter, r *http.Request) {
 			userValue := r.Context().Value(jwt.ContextUserKey)
 			fmt.Println(userValue)

@@ -7,9 +7,7 @@ import (
 	"auth_service/pkg/jwt"
 	"auth_service/pkg/models"
 	"context"
-	"fmt"
 	"net/http"
-	"reflect"
 )
 
 // мидлварь чтобы чекать живость refresh токена,
@@ -39,12 +37,12 @@ func CheckRefreshToken(next http.HandlerFunc, config *conf.Config) http.HandlerF
 		refreshToken := refreshCookie.Value
 		ok1, err1, username := jwt.TokenIsExpired(accessToken, config.SecretKeyAccess, false)
 		if err1 != nil {
-			errors.MakeInternalServerErrorResponse(&w)
+			errors.MakeInternalServerErrorResponse(&w, "")
 		}
 
 		ok2, err2, _ := jwt.TokenIsExpired(refreshToken, config.SecretKeyRefresh, true)
 		if err2 != nil {
-			errors.MakeInternalServerErrorResponse(&w)
+			errors.MakeInternalServerErrorResponse(&w, "")
 		}
 		if !ok1 && !ok2 {
 			w.Write([]byte("keeep going"))
@@ -52,8 +50,7 @@ func CheckRefreshToken(next http.HandlerFunc, config *conf.Config) http.HandlerF
 			http.Redirect(w, r, "http://localhost:8080/logout", 200)
 		}
 		if ok1 {
-			password := db.Users[username].Password
-			accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, password, config.SecretKeyAccess)
+			accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, config.SecretKeyAccess)
 			if err != nil {
 
 			}
@@ -65,7 +62,6 @@ func CheckRefreshToken(next http.HandlerFunc, config *conf.Config) http.HandlerF
 			})
 		}
 
-		fmt.Println(ok1, ok2, reflect.TypeOf(err1), reflect.TypeOf(err2), err1, err2)
 		next.ServeHTTP(w, r)
 	})
 }

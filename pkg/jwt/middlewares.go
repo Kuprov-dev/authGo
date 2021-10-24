@@ -2,13 +2,12 @@ package jwt
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"auth_service/pkg/conf"
+	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	"auth_service/pkg/models"
 
@@ -22,65 +21,75 @@ var ContextUserKey ContextKey = "user"
 // TODO: Access user through user interface + pass user data in ctx <23-10-21, ddbelyaev> //
 // This is a JWT validating middleware. It's purpose is to validate JWT before allowing users
 // request to fall through to next middleware. As a result, it passes on user info in context (ctx).
-func ValidateTokenMiddleware(config *conf.Config) func(http.Handler) http.Handler {
+func ValidateTokenMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			authorizationHeader := req.Header.Get("Access")
-			refreshHeader := req.Header.Get("Refresh")
+			// TODO uncomment this part to handle creds from context
+			// tokenCreds, ok := req.Context().Value(ContextUserKey).(*models.TokenCredentials)
+			// if !ok {
+			// 	errors.MakeUnathorisedErrorResponse(&w, "Empty token creds in context.")
+			// 	return
+			// }
+			// fmt.Println(tokenCreds)
 
-			fmt.Println(authorizationHeader, refreshHeader)
+			accessToken := req.Header.Get("Access")
+			refreshToken := req.Header.Get("Refresh")
 
-			if authorizationHeader != "" {
-				bearerToken := strings.Split(authorizationHeader, " ")
-				if len(bearerToken) == 2 {
-					claims := &Claims{}
-					token, err := jwt.ParseWithClaims(bearerToken[1], claims, func(token *jwt.Token) (interface{}, error) {
-						if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-							return nil, fmt.Errorf("There was an error")
-						}
-						return []byte(config.SecretKeyAccess), nil
-					})
-
-					if token.Valid {
-						var userCreds models.UserCredentials
-
-						userCreds.Username = claims.Username
-						userCreds.AccessToken = authorizationHeader
-						userCreds.RefreshToken = refreshHeader
-
-						ctx := context.WithValue(req.Context(), ContextUserKey, userCreds)
-						next.ServeHTTP(w, req.WithContext(ctx))
-					} else if ve, ok := err.(*jwt.ValidationError); ok {
-						if ve.Errors&jwt.ValidationErrorMalformed != 0 {
-							fmt.Println("That's not even a token")
-							json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
-							w.Header().Set("Content-Type", "application/json")
-							w.WriteHeader(http.StatusUnauthorized)
-						} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
-							fmt.Println("Timing is everything", time.Unix(claims.ExpiresAt, 0))
-							json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
-							w.Header().Set("Content-Type", "application/json")
-							w.WriteHeader(http.StatusUnauthorized)
-						} else {
-							fmt.Println("Couldn't handle this token:", err)
-							json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
-							w.Header().Set("Content-Type", "application/json")
-							w.WriteHeader(http.StatusUnauthorized)
-						}
-						// json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
-						// w.Header().Set("Content-Type", "application/json")
-						// w.WriteHeader(http.StatusUnauthorized)
-					}
-				} else {
-					json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "Invalid authorization token"})
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusUnauthorized)
-				}
-			} else {
-				json.NewEncoder(w).Encode(errors.ErrorMsg{Message: "An authorization header is required"})
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
+			if accessToken == "" {
+				errors.MakeUnathorisedErrorResponse(&w, "An authorization header is required.")
+				return
 			}
+
+			bearerToken := strings.Split(accessToken, " ")
+
+			if len(bearerToken) != 2 {
+				errors.MakeUnathorisedErrorResponse(&w, "Invalid authorization token.")
+				return
+			}
+
+			claims := &Claims{}
+			token, err := jwt.ParseWithClaims(bearerToken[1], claims, func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("There was an error")
+				}
+				return []byte(config.SecretKeyAccess), nil
+			})
+
+			if !token.Valid {
+				ve, ok := err.(*jwt.ValidationError)
+				if !ok {
+					errors.MakeBadRequestErrorResponse(&w, "")
+					return
+				}
+
+				switch {
+				case ve.Errors&jwt.ValidationErrorMalformed != 0:
+					errors.MakeUnathorisedErrorResponse(&w, "Token is not valid JWT.")
+					return
+				case ve.Errors&jwt.ValidationErrorExpired != 0:
+					if refreshedTokenCreds, err := RefreshTokens(claims.Username, refreshToken, config, userDAO); err != nil {
+						errors.MakeUnathorisedErrorResponse(&w, err.Error())
+						return
+					} else {
+						refreshTokenHeaders(&w, refreshedTokenCreds)
+					}
+
+				case ve.Errors&jwt.ValidationErrorNotValidYet != 0:
+					errors.MakeUnathorisedErrorResponse(&w, "Token is not valid yet.")
+					return
+				default:
+					errors.MakeUnathorisedErrorResponse(&w, "Unhandled error when JWT parsing.")
+					return
+				}
+			}
+
+			userCreds := models.UserCredentials{
+				Username:     claims.Username,
+				AccessToken:  accessToken,
+				RefreshToken: refreshToken,
+			}
+			ctx := context.WithValue(req.Context(), ContextUserKey, userCreds)
+			next.ServeHTTP(w, req.WithContext(ctx))
 		})
 	}
 }
