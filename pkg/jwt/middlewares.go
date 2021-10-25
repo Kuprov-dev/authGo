@@ -30,7 +30,7 @@ func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) 
 			}
 
 			if tokenCreds.AccessToken == "" {
-				errors.MakeUnathorisedErrorResponse(&w, "An authorization header is required.")
+				errors.MakeUnathorisedErrorResponse(&w, "An authorization token is required.")
 				return
 			}
 
@@ -112,7 +112,7 @@ func GetTokenCredsFromBody(next http.Handler) http.Handler {
 		var tokenCredsFromBody models.TokenCredentials
 		err = json.Unmarshal(body, &tokenCredsFromBody)
 
-		if err != nil {
+		if err != nil || tokenCredsFromBody.AccessToken == "" || tokenCredsFromBody.RefreshToken == "" {
 			errors.MakeBadRequestErrorResponse(&w, "Expected body keys: [access_token, refresh_token].")
 			return
 		}

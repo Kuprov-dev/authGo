@@ -42,7 +42,7 @@ var CreateAccessToken TokenCreatorFunc
 var CreateRefreshToken TokenCreatorFunc
 
 func init() {
-	accessExpirationDelta := 1 * time.Minute
+	accessExpirationDelta := 5 * time.Minute
 	refreshExpirationDelta := 1 * time.Hour
 
 	CreateAccessToken = createToken(accessExpirationDelta)

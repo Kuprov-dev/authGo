@@ -106,13 +106,32 @@ func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.H
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler := func(w http.ResponseWriter, r *http.Request) {
 			userCreds, err := jwt.GetUserCredsFromContext(r.Context())
-			fmt.Println("HERE", userCreds, err)
+			if err != nil {
+				errors.MakeBadRequestErrorResponse(&w, "Couldn't get user creds from context."+err.Error())
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(models.UserDetailResponse{Username: userCreds.Username})
 		}
 		validateTokenMiddleware := jwt.ValidateTokenAndRefreshMiddleware(config, userDAO)
 		next := jwt.GetTokenCredsFromHeader(validateTokenMiddleware(http.HandlerFunc(handler)))
+		next.ServeHTTP(w, r)
+	}
+}
+
+func ValidateTokensInBodyHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			userCreds, err := jwt.GetUserCredsFromContext(r.Context())
+			if err != nil {
+				errors.MakeBadRequestErrorResponse(&w, "Couldn't get user creds from context."+err.Error())
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(models.UserDetailResponse{Username: userCreds.Username})
+		}
+		validateTokenMiddleware := jwt.ValidateTokenAndRefreshMiddleware(config, userDAO)
+		next := jwt.GetTokenCredsFromBody(validateTokenMiddleware(http.HandlerFunc(handler)))
 		next.ServeHTTP(w, r)
 	}
 }
