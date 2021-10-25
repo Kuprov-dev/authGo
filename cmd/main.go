@@ -34,6 +34,7 @@ func main() {
 	r.Handle("/logout", auth.SignOutHandler(config))
 	r.Handle("/hello", http.HandlerFunc(auth.Hello))
 	r.Handle("/i", auth.ValidateTokenHeadersHandler(config, &userDAO))
+	r.Handle("/me", auth.ValidateTokenBodyHandler(config, &userDAO))
 
 	r.HandleFunc("/debug/pprof/", pprof.Index)
 	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)

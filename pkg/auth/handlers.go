@@ -5,6 +5,7 @@ import (
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	"auth_service/pkg/jwt"
+	"auth_service/pkg/models"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,9 @@ type Credentials struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
 }
+type ContextKeyBody string
+
+var ContextUser ContextKeyBody = "tokenCreds"
 
 // Контроллер логина, конфиг инжектится
 func SignInHandler(config *conf.Config) http.HandlerFunc {
@@ -106,20 +110,58 @@ func Test(config *conf.Config) http.HandlerFunc {
 
 func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		middleware := jwt.ValidateTokenMiddleware(config, userDAO)
+		ContextUser = "Tokens"
+		middleware := jwt.ValidateTokenMiddleware(config, userDAO, "Tokens")
 		//здесь задается рефреш токен
-		refresh := r.Header.Get("Refresh")
-		setValue := func(r *http.Request, val string) *http.Request {
-			return r.WithContext(context.WithValue(r.Context(), "Refresh", val))
+		creds := &models.TokenCredentials{
+			AccessToken:  r.Header.Get("Access"),
+			RefreshToken: r.Header.Get("Refresh"),
+		}
+		setValue := func(r *http.Request, val models.TokenCredentials) *http.Request {
+			return r.WithContext(context.WithValue(r.Context(), "Tokens", val))
 		}
 		handler := func(w http.ResponseWriter, r *http.Request) {
 
-			userValue := r.Context().Value(jwt.ContextUserKey)
-			fmt.Println(userValue)
-			w.Write([]byte("hello"))
+			userValue := r.Context().Value(jwt.ContextUserKey).(models.UserCredentials)
+
+			w.Write([]byte(fmt.Sprintf("Welcome %s!", userValue.Username)))
 
 		}
-		r = setValue(r, refresh)
+		r = setValue(r, *creds)
+
+		next := middleware(http.HandlerFunc(handler))
+		next.ServeHTTP(w, r)
+	}
+}
+
+func ValidateTokenBodyHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		middleware := jwt.ValidateTokenMiddleware(config, userDAO, "TokensBody")
+		//здесь задается рефреш токен
+		var data map[string]string
+		err := json.NewDecoder(r.Body).Decode(&data)
+		creds := &models.TokenCredentials{
+			AccessToken:  data["Access"],
+			RefreshToken: data["Refresh"],
+		}
+		fmt.Println(creds)
+
+		if err != nil {
+			errors.MakeInternalServerErrorResponse(&w, "")
+			return
+		}
+		setValue := func(r *http.Request, val models.TokenCredentials) *http.Request {
+			return r.WithContext(context.WithValue(r.Context(), "TokensBody", val))
+		}
+		handler := func(w http.ResponseWriter, r *http.Request) {
+
+			userValue := r.Context().Value(jwt.ContextUserKey).(models.UserCredentials)
+
+			w.Write([]byte(fmt.Sprintf("Welcome %s,%s,%s!", userValue.Username, userValue.RefreshToken, userValue.AccessToken)))
+
+		}
+		r = setValue(r, *creds)
 
 		next := middleware(http.HandlerFunc(handler))
 		next.ServeHTTP(w, r)
