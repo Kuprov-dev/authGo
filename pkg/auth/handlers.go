@@ -5,6 +5,7 @@ import (
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	"auth_service/pkg/jwt"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -106,11 +107,20 @@ func Test(config *conf.Config) http.HandlerFunc {
 func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		middleware := jwt.ValidateTokenMiddleware(config, userDAO)
+		//здесь задается рефреш токен
+		refresh := r.Header.Get("Refresh")
+		setValue := func(r *http.Request, val string) *http.Request {
+			return r.WithContext(context.WithValue(r.Context(), "Refresh", val))
+		}
 		handler := func(w http.ResponseWriter, r *http.Request) {
+
 			userValue := r.Context().Value(jwt.ContextUserKey)
 			fmt.Println(userValue)
 			w.Write([]byte("hello"))
+
 		}
+		r = setValue(r, refresh)
+
 		next := middleware(http.HandlerFunc(handler))
 		next.ServeHTTP(w, r)
 	}

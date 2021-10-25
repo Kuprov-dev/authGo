@@ -1,22 +1,20 @@
 package jwt
 
 import (
-	"context"
-	"fmt"
-	"net/http"
-	"strings"
-
 	"auth_service/pkg/conf"
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	"auth_service/pkg/models"
+	"context"
+	"fmt"
+	"net/http"
 
 	"github.com/golang-jwt/jwt"
 )
 
 type ContextKey string
 
-var ContextUserKey ContextKey = "user"
+var ContextUserKey ContextKey = "tokenCreds"
 
 // TODO: Access user through user interface + pass user data in ctx <23-10-21, ddbelyaev> //
 // This is a JWT validating middleware. It's purpose is to validate JWT before allowing users
@@ -24,13 +22,13 @@ var ContextUserKey ContextKey = "user"
 func ValidateTokenMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			// TODO uncomment this part to handle creds from context
-			// tokenCreds, ok := req.Context().Value(ContextUserKey).(*models.TokenCredentials)
-			// if !ok {
-			// 	errors.MakeUnathorisedErrorResponse(&w, "Empty token creds in context.")
-			// 	return
-			// }
-			// fmt.Println(tokenCreds)
+			// вот так передается токен по контексту
+			tokenCreds := req.Context().Value("Refresh")
+			//if !ok {
+			//	errors.MakeUnathorisedErrorResponse(&w, "Empty token creds in context.")
+			//	return
+			//}
+			fmt.Println(tokenCreds)
 
 			accessToken := req.Header.Get("Access")
 			refreshToken := req.Header.Get("Refresh")
@@ -40,7 +38,7 @@ func ValidateTokenMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.
 				return
 			}
 
-			bearerToken := strings.Split(accessToken, " ")
+			bearerToken := [2]string{accessToken, refreshToken}
 
 			if len(bearerToken) != 2 {
 				errors.MakeUnathorisedErrorResponse(&w, "Invalid authorization token.")
@@ -52,7 +50,7 @@ func ValidateTokenMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, fmt.Errorf("There was an error")
 				}
-				return []byte(config.SecretKeyAccess), nil
+				return []byte(config.SecretKeyRefresh), nil
 			})
 
 			if !token.Valid {
