@@ -1,8 +1,9 @@
 package jwt
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -14,33 +15,26 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
-type ContextKey string
-
-var ContextUserKey ContextKey = "user"
-
 // TODO: Access user through user interface + pass user data in ctx <23-10-21, ddbelyaev> //
 // This is a JWT validating middleware. It's purpose is to validate JWT before allowing users
 // request to fall through to next middleware. As a result, it passes on user info in context (ctx).
-func ValidateTokenMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.Handler) http.Handler {
+// TODO: keep SRP and divide into 2 middlewares: validate and refresh
+func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			// TODO uncomment this part to handle creds from context
-			// tokenCreds, ok := req.Context().Value(ContextUserKey).(*models.TokenCredentials)
-			// if !ok {
-			// 	errors.MakeUnathorisedErrorResponse(&w, "Empty token creds in context.")
-			// 	return
-			// }
-			// fmt.Println(tokenCreds)
+			tokenCreds, err := GetTokenCredsFromContext(req.Context())
 
-			accessToken := req.Header.Get("Access")
-			refreshToken := req.Header.Get("Refresh")
+			if err != nil {
+				errors.MakeUnathorisedErrorResponse(&w, err.Error())
+				return
+			}
 
-			if accessToken == "" {
+			if tokenCreds.AccessToken == "" {
 				errors.MakeUnathorisedErrorResponse(&w, "An authorization header is required.")
 				return
 			}
 
-			bearerToken := strings.Split(accessToken, " ")
+			bearerToken := strings.Split(tokenCreds.AccessToken, " ")
 
 			if len(bearerToken) != 2 {
 				errors.MakeUnathorisedErrorResponse(&w, "Invalid authorization token.")
@@ -67,7 +61,7 @@ func ValidateTokenMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.
 					errors.MakeUnathorisedErrorResponse(&w, "Token is not valid JWT.")
 					return
 				case ve.Errors&jwt.ValidationErrorExpired != 0:
-					if refreshedTokenCreds, err := RefreshTokens(claims.Username, refreshToken, config, userDAO); err != nil {
+					if refreshedTokenCreds, err := RefreshTokens(claims.Username, tokenCreds.RefreshToken, config, userDAO); err != nil {
 						errors.MakeUnathorisedErrorResponse(&w, err.Error())
 						return
 					} else {
@@ -85,11 +79,49 @@ func ValidateTokenMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.
 
 			userCreds := models.UserCredentials{
 				Username:     claims.Username,
-				AccessToken:  accessToken,
-				RefreshToken: refreshToken,
+				AccessToken:  tokenCreds.AccessToken,
+				RefreshToken: tokenCreds.RefreshToken,
 			}
-			ctx := context.WithValue(req.Context(), ContextUserKey, userCreds)
-			next.ServeHTTP(w, req.WithContext(ctx))
+			ctxWithCreds := PassUserCredsInContext(&userCreds, req.Context())
+			next.ServeHTTP(w, req.WithContext(ctxWithCreds))
 		})
 	}
+}
+
+func GetTokenCredsFromHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCreds := &models.TokenCredentials{
+			AccessToken:  r.Header.Get("Access"),
+			RefreshToken: r.Header.Get("Refresh"),
+		}
+		ctxWithCreds := PassTokenCredsInContext(tokenCreds, r.Context())
+		next.ServeHTTP(w, r.WithContext(ctxWithCreds))
+	})
+}
+
+func GetTokenCredsFromBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
+
+		if err != nil {
+			errors.MakeBadRequestErrorResponse(&w, "Expected body keys: [access_token, refresh_token].")
+			return
+		}
+
+		var tokenCredsFromBody models.TokenCredentials
+		err = json.Unmarshal(body, &tokenCredsFromBody)
+
+		if err != nil {
+			errors.MakeBadRequestErrorResponse(&w, "Expected body keys: [access_token, refresh_token].")
+			return
+		}
+
+		tokenCreds := &models.TokenCredentials{
+			AccessToken:  tokenCredsFromBody.AccessToken,
+			RefreshToken: tokenCredsFromBody.RefreshToken,
+		}
+		ctxWithCreds := PassTokenCredsInContext(tokenCreds, r.Context())
+		next.ServeHTTP(w, r.WithContext(ctxWithCreds))
+	})
 }

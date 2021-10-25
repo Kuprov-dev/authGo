@@ -25,3 +25,7 @@ type RefreshedTokenCreds struct {
 	RefreshExpirationTime time.Time
 	AccessExpirationTime  time.Time
 }
+
+type UserDetailResponse struct {
+	Username string `json:"username"`
+}

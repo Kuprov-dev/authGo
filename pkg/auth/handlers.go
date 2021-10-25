@@ -5,6 +5,7 @@ import (
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	"auth_service/pkg/jwt"
+	"auth_service/pkg/models"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -44,7 +45,6 @@ func SignInHandler(config *conf.Config) http.HandlerFunc {
 
 		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, config.SecretKeyRefresh)
 		if err != nil {
-			fmt.Println(refreshToken, err)
 			errors.MakeInternalServerErrorResponse(&w, "")
 		}
 
@@ -97,7 +97,6 @@ func Hello(w http.ResponseWriter, r *http.Request) {
 // Тестовая ручка чтоб посмотреть в хедеры и заюзать мидлварь
 func Test(config *conf.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("MIDDLEWARE!")
 		next := CheckRefreshToken(Hello, config)
 		next.ServeHTTP(w, r)
 	}
@@ -105,13 +104,15 @@ func Test(config *conf.Config) http.HandlerFunc {
 
 func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		middleware := jwt.ValidateTokenMiddleware(config, userDAO)
 		handler := func(w http.ResponseWriter, r *http.Request) {
-			userValue := r.Context().Value(jwt.ContextUserKey)
-			fmt.Println(userValue)
-			w.Write([]byte("hello"))
+			userCreds, err := jwt.GetUserCredsFromContext(r.Context())
+			fmt.Println("HERE", userCreds, err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(models.UserDetailResponse{Username: userCreds.Username})
 		}
-		next := middleware(http.HandlerFunc(handler))
+		validateTokenMiddleware := jwt.ValidateTokenAndRefreshMiddleware(config, userDAO)
+		next := jwt.GetTokenCredsFromHeader(validateTokenMiddleware(http.HandlerFunc(handler)))
 		next.ServeHTTP(w, r)
 	}
 }
