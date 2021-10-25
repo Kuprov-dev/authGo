@@ -3,6 +3,7 @@ package main
 import (
 	"auth_service/pkg/auth"
 	"auth_service/pkg/conf"
+	"auth_service/pkg/db"
 	logging "auth_service/pkg/logging"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,21 +24,23 @@ func main() {
 	log := logrus.New()
 	log.SetFormatter(&logrus.JSONFormatter{})
 	logEntry := logrus.NewEntry(log)
+	userDAO := db.InMemroyUserDAO{}
 
-	mux := http.NewServeMux()
+	r := mux.NewRouter()
 
 	fmt.Println("Server started...")
 
-	mux.Handle("/login", auth.SignInHandler(config))
-	mux.Handle("/logout", auth.SignOutHandler(config))
-	mux.Handle("/hello", http.HandlerFunc(auth.Hello))
-	mux.Handle("/i", auth.ValidateTokenHeadersHandler(config))
+	r.Handle("/login", auth.SignInHandler(config)).Methods("POST")
+	r.Handle("/logout", auth.SignOutHandler(config))
+	r.Handle("/hello", http.HandlerFunc(auth.Hello))
+	r.Handle("/i", auth.ValidateTokenHeadersHandler(config, &userDAO))
+	r.Handle("/me", auth.ValidateTokenBodyHandler(config, &userDAO))
 
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	r.HandleFunc("/debug/pprof/", pprof.Index)
+	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop,
@@ -46,7 +50,7 @@ func main() {
 		syscall.SIGQUIT,
 	)
 
-	handler := logging.LoggingMiddleware(logEntry)(mux)
+	handler := logging.LoggingMiddleware(logEntry)(r)
 	s := &http.Server{
 		Addr:    PORT,
 		Handler: handler,

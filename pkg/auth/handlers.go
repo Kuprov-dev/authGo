@@ -5,6 +5,8 @@ import (
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	"auth_service/pkg/jwt"
+	"auth_service/pkg/models"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +17,9 @@ type Credentials struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
 }
+type ContextKeyBody string
+
+var ContextUser ContextKeyBody = "tokenCreds"
 
 // Контроллер логина, конфиг инжектится
 func SignInHandler(config *conf.Config) http.HandlerFunc {
@@ -32,21 +37,20 @@ func SignInHandler(config *conf.Config) http.HandlerFunc {
 		ok := checkUserPassowrd(username, password, &userDAO)
 
 		if !ok {
-			errors.MakeUnathorisedErrorResponse(&w)
+			errors.MakeUnathorisedErrorResponse(&w, "")
 			return
 		}
 
-		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, password, config.SecretKeyAccess)
+		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, config.SecretKeyAccess)
 
 		if err != nil {
-			fmt.Println(accessToken, err)
-			errors.MakeInternalServerErrorResponse(&w)
+			errors.MakeInternalServerErrorResponse(&w, "")
 		}
 
-		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, password, config.SecretKeyRefresh)
+		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, config.SecretKeyRefresh)
 		if err != nil {
 			fmt.Println(refreshToken, err)
-			errors.MakeInternalServerErrorResponse(&w)
+			errors.MakeInternalServerErrorResponse(&w, "")
 		}
 
 		userDAO.UpdateRefreshToken(username, refreshToken)
@@ -104,14 +108,61 @@ func Test(config *conf.Config) http.HandlerFunc {
 	}
 }
 
-func ValidateTokenHeadersHandler(config *conf.Config) http.HandlerFunc {
+func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		middleware := jwt.ValidateTokenMiddleware(config)
-		handler := func(w http.ResponseWriter, r *http.Request) {
-			userValue := r.Context().Value(jwt.ContextUserKey)
-			fmt.Println(userValue)
-			w.Write([]byte("hello"))
+		ContextUser = "Tokens"
+		middleware := jwt.ValidateTokenMiddleware(config, userDAO, "Tokens")
+		//здесь задается рефреш токен
+		creds := &models.TokenCredentials{
+			AccessToken:  r.Header.Get("Access"),
+			RefreshToken: r.Header.Get("Refresh"),
 		}
+		setValue := func(r *http.Request, val models.TokenCredentials) *http.Request {
+			return r.WithContext(context.WithValue(r.Context(), "Tokens", val))
+		}
+		handler := func(w http.ResponseWriter, r *http.Request) {
+
+			userValue := r.Context().Value(jwt.ContextUserKey).(models.UserCredentials)
+
+			w.Write([]byte(fmt.Sprintf("Welcome %s!", userValue.Username)))
+
+		}
+		r = setValue(r, *creds)
+
+		next := middleware(http.HandlerFunc(handler))
+		next.ServeHTTP(w, r)
+	}
+}
+
+func ValidateTokenBodyHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		middleware := jwt.ValidateTokenMiddleware(config, userDAO, "TokensBody")
+		//здесь задается рефреш токен
+		var data map[string]string
+		err := json.NewDecoder(r.Body).Decode(&data)
+		creds := &models.TokenCredentials{
+			AccessToken:  data["Access"],
+			RefreshToken: data["Refresh"],
+		}
+		fmt.Println(creds)
+
+		if err != nil {
+			errors.MakeInternalServerErrorResponse(&w, "")
+			return
+		}
+		setValue := func(r *http.Request, val models.TokenCredentials) *http.Request {
+			return r.WithContext(context.WithValue(r.Context(), "TokensBody", val))
+		}
+		handler := func(w http.ResponseWriter, r *http.Request) {
+
+			userValue := r.Context().Value(jwt.ContextUserKey).(models.UserCredentials)
+
+			w.Write([]byte(fmt.Sprintf("Welcome %s,%s,%s!", userValue.Username, userValue.RefreshToken, userValue.AccessToken)))
+
+		}
+		r = setValue(r, *creds)
+
 		next := middleware(http.HandlerFunc(handler))
 		next.ServeHTTP(w, r)
 	}

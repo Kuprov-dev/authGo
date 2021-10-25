@@ -5,12 +5,13 @@ import "auth_service/pkg/models"
 type UserDAO interface {
 	GetByUsername(username string) *models.User
 	UpdateRefreshToken(username string, refreshToken string) *models.User
+	GetRefreshToken(username string) string
 }
 
-var Users map[string]models.User
+var Users map[string]*models.User
 
 func init() {
-	Users = map[string]models.User{
+	Users = map[string]*models.User{
 		"user1": {
 			Username: "user1",
 			Password: "password1",
@@ -35,7 +36,7 @@ func (*InMemroyUserDAO) GetByUsername(username string) *models.User {
 		return nil
 	}
 
-	return &user
+	return user
 }
 
 func (*InMemroyUserDAO) UpdateRefreshToken(username string, refreshToken string) *models.User {
@@ -46,5 +47,14 @@ func (*InMemroyUserDAO) UpdateRefreshToken(username string, refreshToken string)
 
 	user.RefreshToken = refreshToken
 
-	return &user
+	return user
+}
+
+func (*InMemroyUserDAO) GetRefreshToken(username string) string {
+	user, ok := Users[username]
+	if !ok {
+		return ""
+	}
+
+	return user.RefreshToken
 }
