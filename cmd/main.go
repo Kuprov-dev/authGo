@@ -19,22 +19,21 @@ import (
 const PORT string = ":8080"
 
 func main() {
-	config := conf.New()
-
 	log := logrus.New()
 	log.SetFormatter(&logrus.JSONFormatter{})
 	logEntry := logrus.NewEntry(log)
+	config := conf.New()
 	userDAO := db.InMemroyUserDAO{}
 
 	r := mux.NewRouter()
 
 	fmt.Println("Server started...")
 
-	r.Handle("/login", auth.SignInHandler(config)).Methods("POST")
+	r.Handle("/login", auth.SignInHandler(config, &userDAO)).Methods("POST")
 	r.Handle("/logout", auth.SignOutHandler(config))
 	r.Handle("/hello", http.HandlerFunc(auth.Hello))
 	r.Handle("/i", auth.ValidateTokenHeadersHandler(config, &userDAO))
-	r.Handle("/me", auth.ValidateTokenBodyHandler(config, &userDAO))
+	r.Handle("/me", auth.ValidateTokensInBodyHandler(config, &userDAO))
 
 	r.HandleFunc("/debug/pprof/", pprof.Index)
 	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)

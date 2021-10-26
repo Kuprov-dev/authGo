@@ -6,7 +6,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// for futher implementation
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
@@ -22,10 +21,5 @@ func checkUserPassowrd(username, password string, userRepo db.UserDAO) bool {
 	if user == nil {
 		return false
 	}
-	hash, err := HashPassword(password)
-	if err != nil {
-		return false
-	}
-	isCorrectPassword := CheckPasswordHash(user.Password, hash)
-	return isCorrectPassword
+	return CheckPasswordHash(password, user.Password)
 }

@@ -42,36 +42,11 @@ var CreateAccessToken TokenCreatorFunc
 var CreateRefreshToken TokenCreatorFunc
 
 func init() {
-	accessExpirationDelta := 1 * time.Minute
+	accessExpirationDelta := 5 * time.Minute
 	refreshExpirationDelta := 1 * time.Hour
 
 	CreateAccessToken = createToken(accessExpirationDelta)
 	CreateRefreshToken = createToken(refreshExpirationDelta)
-}
-
-func TokenIsExpired(tokenStr string, secretKey string, resfresh bool) (bool, error, string) {
-	claims := &Claims{}
-
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(secretKey), nil
-	})
-
-	if err != nil {
-		return false, err, claims.Username
-	}
-	if !token.Valid {
-		return false, err, claims.Username
-	}
-	if resfresh == true {
-		if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) < 60*time.Minute {
-			return false, nil, claims.Username
-		}
-	} else {
-		if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) < 5*time.Minute {
-			return false, nil, claims.Username
-		}
-	}
-	return true, nil, claims.Username
 }
 
 func userRefreshTokenMatches(username, refreshToken string, userDAO db.UserDAO) bool {
@@ -153,7 +128,7 @@ func RefreshTokens(username string, refreshToken string, config *conf.Config, us
 	return nil, err
 }
 
-func refreshTokenHeaders(w *http.ResponseWriter, refreshedTokenCreds *models.RefreshedTokenCreds) {
+func RefreshTokenHeaders(w *http.ResponseWriter, refreshedTokenCreds *models.RefreshedTokenCreds) {
 	http.SetCookie(*w, &http.Cookie{
 		Name:     "Access",
 		Value:    refreshedTokenCreds.AccessToken,

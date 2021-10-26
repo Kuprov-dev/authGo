@@ -19,7 +19,7 @@ func LoggingMiddleware(log *logrus.Entry) func(http.Handler) http.Handler {
 				"time":   time.Now(),
 			})
 
-			newEntry.Info("kek")
+			newEntry.Info("Start logging.")
 
 			ctx := context.WithValue(r.Context(), loggerCtxKey{}, newEntry)
 
