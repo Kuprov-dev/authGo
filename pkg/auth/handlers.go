@@ -6,7 +6,6 @@ import (
 	"auth_service/pkg/errors"
 	"auth_service/pkg/jwt"
 	"auth_service/pkg/models"
-
 	"encoding/json"
 	"fmt"
 	"net/http"
