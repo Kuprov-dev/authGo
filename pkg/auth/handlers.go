@@ -6,46 +6,41 @@ import (
 	"auth_service/pkg/errors"
 	"auth_service/pkg/jwt"
 	"auth_service/pkg/models"
+
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 )
 
-type Credentials struct {
-	Password string `json:"password"`
-	Username string `json:"username"`
-}
-
 // Контроллер логина, конфиг инжектится
-func SignInHandler(config *conf.Config) http.HandlerFunc {
+func SignInHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var creds Credentials
+		var creds models.LoginCredentials
 		err := json.NewDecoder(r.Body).Decode(&creds)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+			errors.MakeUnathorisedErrorResponse(&w, "Error decoding creds.")
 			return
 		}
 		username := creds.Username
 		password := creds.Password
 
-		userDAO := db.InMemroyUserDAO{}
-		ok := checkUserPassowrd(username, password, &userDAO)
+		ok := checkUserPassowrd(username, password, userDAO)
 
 		if !ok {
-			errors.MakeUnathorisedErrorResponse(&w, "")
+			errors.MakeUnathorisedErrorResponse(&w, "Password doesn't match.")
 			return
 		}
 
 		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, config.SecretKeyAccess)
 
 		if err != nil {
-			errors.MakeInternalServerErrorResponse(&w, "")
+			errors.MakeInternalServerErrorResponse(&w, "Error create access token.")
 		}
 
 		refreshToken, refreshExpirationTime, err := jwt.CreateRefreshToken(username, config.SecretKeyRefresh)
 		if err != nil {
-			errors.MakeInternalServerErrorResponse(&w, "")
+			errors.MakeInternalServerErrorResponse(&w, "Error create refresh token.")
 		}
 
 		userDAO.UpdateRefreshToken(username, refreshToken)
@@ -94,14 +89,6 @@ func Hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("hello")
 }
 
-// Тестовая ручка чтоб посмотреть в хедеры и заюзать мидлварь
-func Test(config *conf.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		next := CheckRefreshToken(Hello, config)
-		next.ServeHTTP(w, r)
-	}
-}
-
 func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler := func(w http.ResponseWriter, r *http.Request) {
@@ -113,8 +100,8 @@ func ValidateTokenHeadersHandler(config *conf.Config, userDAO db.UserDAO) http.H
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(models.UserDetailResponse{Username: userCreds.Username})
 		}
-		validateTokenMiddleware := jwt.ValidateTokenAndRefreshMiddleware(config, userDAO)
-		next := jwt.GetTokenCredsFromHeader(validateTokenMiddleware(http.HandlerFunc(handler)))
+		validateTokenMiddleware := ValidateTokenAndRefreshMiddleware(config, userDAO)
+		next := GetTokenCredsFromHeader(validateTokenMiddleware(http.HandlerFunc(handler)))
 		next.ServeHTTP(w, r)
 	}
 }
@@ -130,8 +117,8 @@ func ValidateTokensInBodyHandler(config *conf.Config, userDAO db.UserDAO) http.H
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(models.UserDetailResponse{Username: userCreds.Username})
 		}
-		validateTokenMiddleware := jwt.ValidateTokenAndRefreshMiddleware(config, userDAO)
-		next := jwt.GetTokenCredsFromBody(validateTokenMiddleware(http.HandlerFunc(handler)))
+		validateTokenMiddleware := ValidateTokenAndRefreshMiddleware(config, userDAO)
+		next := GetTokenCredsFromBody(validateTokenMiddleware(http.HandlerFunc(handler)))
 		next.ServeHTTP(w, r)
 	}
 }

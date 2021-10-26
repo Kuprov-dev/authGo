@@ -29,3 +29,10 @@ type RefreshedTokenCreds struct {
 type UserDetailResponse struct {
 	Username string `json:"username"`
 }
+
+type LoginCredentials struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// TODO separate models and schemes

@@ -14,15 +14,15 @@ func init() {
 	Users = map[string]*models.User{
 		"user1": {
 			Username: "user1",
-			Password: "password1",
+			Password: "$2a$10$EWGUgDWL9kL6cWIuCjSMxu5ZccORaBifqP/qgFa069zGYnFXHG29S",
 		},
 		"user2": {
 			Username: "user2",
-			Password: "password2",
+			Password: "$2a$10$EWGUgDWL9kL6cWIuCjSMxu5ZccORaBifqP/qgFa069zGYnFXHG29S",
 		},
 		"user3": {
 			Username: "user3",
-			Password: "password3",
+			Password: "$2a$10$EWGUgDWL9kL6cWIuCjSMxu5ZccORaBifqP/qgFa069zGYnFXHG29S",
 		},
 	}
 }

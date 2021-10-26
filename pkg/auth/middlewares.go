@@ -1,85 +1,127 @@
 package auth
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strings"
+
 	"auth_service/pkg/conf"
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
-	"auth_service/pkg/jwt"
+	jwtUtils "auth_service/pkg/jwt"
 	"auth_service/pkg/models"
-	"context"
-	"net/http"
+
+	"github.com/golang-jwt/jwt"
 )
 
-// мидлварь чтобы чекать живость refresh токена,
-// по возможности обновлять пару (access, refresh) или отправлять на /login
-func CheckRefreshToken(next http.HandlerFunc, config *conf.Config) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		accessCookie, err := r.Cookie("Access")
-		if err != nil {
-			if err == http.ErrNoCookie {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		accessToken := accessCookie.Value
-		refreshCookie, err := r.Cookie("Refresh")
-		if err != nil {
-			if err == http.ErrNoCookie {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
+// TODO: Access user through user interface + pass user data in ctx <23-10-21, ddbelyaev> //
+// This is a JWT validating middleware. It's purpose is to validate JWT before allowing users
+// request to fall through to next middleware. As a result, it passes on user info in context (ctx).
+// TODO: keep SRP and divide into 2 middlewares: validate and refresh
+func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			tokenCreds, err := jwtUtils.GetTokenCredsFromContext(req.Context())
 
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		refreshToken := refreshCookie.Value
-		ok1, err1, username := jwt.TokenIsExpired(accessToken, config.SecretKeyAccess, false)
-		if err1 != nil {
-			errors.MakeInternalServerErrorResponse(&w, "")
-		}
-
-		ok2, err2, _ := jwt.TokenIsExpired(refreshToken, config.SecretKeyRefresh, true)
-		if err2 != nil {
-			errors.MakeInternalServerErrorResponse(&w, "")
-		}
-		if !ok1 && !ok2 {
-			w.Write([]byte("keeep going"))
-		} else if ok2 {
-			http.Redirect(w, r, "http://localhost:8080/logout", 200)
-		}
-		if ok1 {
-			accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, config.SecretKeyAccess)
 			if err != nil {
-
+				errors.MakeUnathorisedErrorResponse(&w, err.Error())
+				return
 			}
-			http.SetCookie(w, &http.Cookie{
-				Name:    "Token",
-				Value:   accessToken,
-				Path:    "/",
-				Expires: accessExpirationTime,
-			})
-		}
 
-		next.ServeHTTP(w, r)
+			if tokenCreds.AccessToken == "" {
+				errors.MakeUnathorisedErrorResponse(&w, "An authorization token is required.")
+				return
+			}
+
+			bearerToken := strings.Split(tokenCreds.AccessToken, " ")
+
+			if len(bearerToken) != 2 {
+				errors.MakeUnathorisedErrorResponse(&w, "Invalid authorization token.")
+				return
+			}
+
+			claims := &jwtUtils.Claims{}
+			token, err := jwt.ParseWithClaims(bearerToken[1], claims, func(token *jwt.Token) (interface{}, error) {
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("There was an error")
+				}
+				return []byte(config.SecretKeyAccess), nil
+			})
+
+			if !token.Valid {
+				ve, ok := err.(*jwt.ValidationError)
+				if !ok {
+					errors.MakeBadRequestErrorResponse(&w, "")
+					return
+				}
+
+				switch {
+				case ve.Errors&jwt.ValidationErrorMalformed != 0:
+					errors.MakeUnathorisedErrorResponse(&w, "Token is not valid JWT.")
+					return
+				case ve.Errors&jwt.ValidationErrorExpired != 0:
+					if refreshedTokenCreds, err := jwtUtils.RefreshTokens(claims.Username, tokenCreds.RefreshToken, config, userDAO); err != nil {
+						errors.MakeUnathorisedErrorResponse(&w, err.Error())
+						return
+					} else {
+						jwtUtils.RefreshTokenHeaders(&w, refreshedTokenCreds)
+					}
+				case ve.Errors&jwt.ValidationErrorNotValidYet != 0:
+					errors.MakeUnathorisedErrorResponse(&w, "Token is not valid yet.")
+					return
+				default:
+					errors.MakeUnathorisedErrorResponse(&w, "Unhandled error when JWT parsing.")
+					return
+				}
+			}
+
+			userCreds := models.UserCredentials{
+				Username:     claims.Username,
+				AccessToken:  tokenCreds.AccessToken,
+				RefreshToken: tokenCreds.RefreshToken,
+			}
+			ctxWithCreds := jwtUtils.PassUserCredsInContext(&userCreds, req.Context())
+			next.ServeHTTP(w, req.WithContext(ctxWithCreds))
+		})
+	}
+}
+
+func GetTokenCredsFromHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCreds := &models.TokenCredentials{
+			AccessToken:  r.Header.Get("Access"),
+			RefreshToken: r.Header.Get("Refresh"),
+		}
+		ctxWithCreds := jwtUtils.PassTokenCredsInContext(tokenCreds, r.Context())
+		next.ServeHTTP(w, r.WithContext(ctxWithCreds))
 	})
 }
 
-type ContextKey string
+func GetTokenCredsFromBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
 
-var ContextTokenCredsKey ContextKey = "tokenCreds"
+		if err != nil {
+			errors.MakeBadRequestErrorResponse(&w, "Expected body keys: [access_token, refresh_token].")
+			return
+		}
 
-// Тестовая мидлварь которая берет из хедера и кладет в контекст
-func GetFromHeadersAndPassToContext(config *conf.Config, userDao db.UserDAO) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			creds := &models.TokenCredentials{
-				AccessToken:  r.Header.Get("Access"),
-				RefreshToken: r.Header.Get("Refresh"),
-			}
-			ctx := context.WithValue(r.Context(), ContextTokenCredsKey, creds)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
+		var tokenCredsFromBody models.TokenCredentials
+		err = json.Unmarshal(body, &tokenCredsFromBody)
+
+		if err != nil || tokenCredsFromBody.AccessToken == "" || tokenCredsFromBody.RefreshToken == "" {
+			errors.MakeBadRequestErrorResponse(&w, "Expected body keys: [access_token, refresh_token].")
+			return
+		}
+
+		tokenCreds := &models.TokenCredentials{
+			AccessToken:  tokenCredsFromBody.AccessToken,
+			RefreshToken: tokenCredsFromBody.RefreshToken,
+		}
+		ctxWithCreds := jwtUtils.PassTokenCredsInContext(tokenCreds, r.Context())
+		next.ServeHTTP(w, r.WithContext(ctxWithCreds))
+	})
 }
