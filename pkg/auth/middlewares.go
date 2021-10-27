@@ -1,18 +1,16 @@
 package auth
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"strings"
-
 	"auth_service/pkg/conf"
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	jwtUtils "auth_service/pkg/jwt"
 	"auth_service/pkg/models"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
 
 	"github.com/golang-jwt/jwt"
 )
@@ -25,7 +23,7 @@ func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			tokenCreds, err := jwtUtils.GetTokenCredsFromContext(req.Context())
-
+			fmt.Println(tokenCreds)
 			if err != nil {
 				log.Println("Unathorised error.")
 				errors.MakeUnathorisedErrorResponse(&w, err.Error())
@@ -37,8 +35,8 @@ func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) 
 				errors.MakeUnathorisedErrorResponse(&w, "An authorization token is required.")
 				return
 			}
-
-			bearerToken := strings.Split(tokenCreds.AccessToken, " ")
+			// TODO это не токен тот который нам нужен
+			bearerToken := [2]string{tokenCreds.RefreshToken, tokenCreds.AccessToken}
 
 			if len(bearerToken) != 2 {
 				log.Println("Not valid token.")
