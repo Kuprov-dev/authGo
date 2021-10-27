@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strings"
 
@@ -26,11 +27,13 @@ func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) 
 			tokenCreds, err := jwtUtils.GetTokenCredsFromContext(req.Context())
 
 			if err != nil {
+				log.Println("Unathorised error.")
 				errors.MakeUnathorisedErrorResponse(&w, err.Error())
 				return
 			}
 
 			if tokenCreds.AccessToken == "" {
+				log.Println("Token is empty.")
 				errors.MakeUnathorisedErrorResponse(&w, "An authorization token is required.")
 				return
 			}
@@ -38,6 +41,7 @@ func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) 
 			bearerToken := strings.Split(tokenCreds.AccessToken, " ")
 
 			if len(bearerToken) != 2 {
+				log.Println("Not valid token.")
 				errors.MakeUnathorisedErrorResponse(&w, "Invalid authorization token.")
 				return
 			}
@@ -45,6 +49,7 @@ func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) 
 			claims := &jwtUtils.Claims{}
 			token, err := jwt.ParseWithClaims(bearerToken[1], claims, func(token *jwt.Token) (interface{}, error) {
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					log.Println("Error JWT parsing.")
 					return nil, fmt.Errorf("There was an error")
 				}
 				return []byte(config.SecretKeyAccess), nil
@@ -53,25 +58,30 @@ func ValidateTokenAndRefreshMiddleware(config *conf.Config, userDAO db.UserDAO) 
 			if !token.Valid {
 				ve, ok := err.(*jwt.ValidationError)
 				if !ok {
-					errors.MakeBadRequestErrorResponse(&w, "")
+					errors.MakeBadRequestErrorResponse(&w, "Error ValidateionError typecast")
 					return
 				}
 
 				switch {
 				case ve.Errors&jwt.ValidationErrorMalformed != 0:
+					log.Println("Not valid token.")
 					errors.MakeUnathorisedErrorResponse(&w, "Token is not valid JWT.")
 					return
 				case ve.Errors&jwt.ValidationErrorExpired != 0:
 					if refreshedTokenCreds, err := jwtUtils.RefreshTokens(claims.Username, tokenCreds.RefreshToken, config, userDAO); err != nil {
+						log.Println("Token is expired.")
 						errors.MakeUnathorisedErrorResponse(&w, err.Error())
 						return
 					} else {
+						log.Println("Refresh tokens")
 						jwtUtils.RefreshTokenHeaders(&w, refreshedTokenCreds)
 					}
 				case ve.Errors&jwt.ValidationErrorNotValidYet != 0:
+					log.Println("Error is not valid yet.")
 					errors.MakeUnathorisedErrorResponse(&w, "Token is not valid yet.")
 					return
 				default:
+					log.Println("Unhandled error when JWT parsing")
 					errors.MakeUnathorisedErrorResponse(&w, "Unhandled error when JWT parsing.")
 					return
 				}
@@ -111,8 +121,8 @@ func GetTokenCredsFromBody(next http.Handler) http.Handler {
 
 		var tokenCredsFromBody models.TokenCredentials
 		err = json.Unmarshal(body, &tokenCredsFromBody)
-
 		if err != nil || tokenCredsFromBody.AccessToken == "" || tokenCredsFromBody.RefreshToken == "" {
+			log.Printf("Not valid creds from body: %v %v", err, tokenCredsFromBody)
 			errors.MakeBadRequestErrorResponse(&w, "Expected body keys: [access_token, refresh_token].")
 			return
 		}
