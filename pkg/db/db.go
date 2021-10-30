@@ -1,7 +1,10 @@
 package db
 
-import "auth_service/pkg/models"
+import (
+	"auth_service/pkg/models"
+)
 
+//create database search for searching users and generate uuid
 type UserDAO interface {
 	GetByUsername(username string) *models.User
 	UpdateRefreshToken(username string, refreshToken string) *models.User
