@@ -5,6 +5,7 @@ import (
 	"auth_service/pkg/db"
 	"auth_service/pkg/models"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -13,11 +14,13 @@ import (
 )
 
 func TestSignInHandler(t *testing.T) {
+
 	config := conf.New()
 	userDAO := db.InMemroyUserDAO{}
 	users := &db.Users
 	password, _ := HashPassword("password")
-
+	db.ConnectMongoDB(context.TODO(), config)
+	userDBDAO := db.NewMongoDBTemp(context.TODO(), db.GetMongoDBConnection())
 	(*users)["testuser"] = &models.User{
 		Username: "testuser",
 		Password: password,
@@ -35,11 +38,11 @@ func TestSignInHandler(t *testing.T) {
 
 	wr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/i", b)
-
+	reqlogin := httptest.NewRequest(http.MethodPost, "/login", b)
 	body, _ := ioutil.ReadAll(wr.Body)
 	defer req.Body.Close()
 
-	SignInHandler(config, &userDAO)(wr, req)
+	SignInHandler(config, &userDAO, context.TODO(), userDBDAO)(wr, reqlogin)
 	if wr.Code != http.StatusOK {
 		t.Errorf("got HTTP status code %d, expected 200, %v", wr.Code, string(body))
 	}

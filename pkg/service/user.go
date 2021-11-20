@@ -5,7 +5,7 @@ import (
 )
 
 type User struct {
-	ID       int
+	ID       string
 	Username string
 	Password string
 }
@@ -14,8 +14,8 @@ func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 	return s.userStorage.ListUsers(ctx)
 }
 
-func (s *Service) CreateUser(ctx context.Context, user *User) error {
-	user.ID = 228
-
-	return s.userStorage.CreateUser(ctx, user)
-}
+//func (s *Service) CreateUser(ctx context.Context, user *User) error {
+//	user.ID =
+//
+//	return s.userStorage.CreateUser(ctx, user)
+//}

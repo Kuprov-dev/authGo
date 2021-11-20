@@ -2,7 +2,7 @@ package auth
 
 import (
 	"auth_service/pkg/conf"
-	"auth_service/pkg/database"
+
 	"auth_service/pkg/db"
 	"auth_service/pkg/errors"
 	"auth_service/pkg/jwt"
@@ -16,7 +16,7 @@ import (
 )
 
 // Контроллер логина, конфиг инжектится
-func SignInHandler(config *conf.Config, userDAO db.UserDAO, ctx context.Context, d *database.Database) http.HandlerFunc {
+func SignInHandler(config *conf.Config, userDAO db.UserDAO, ctx context.Context, dao *db.MongoDBTempDAO) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var creds models.LoginCredentials
 		err := json.NewDecoder(r.Body).Decode(&creds)
@@ -26,16 +26,16 @@ func SignInHandler(config *conf.Config, userDAO db.UserDAO, ctx context.Context,
 		}
 		username := creds.Username
 		password := creds.Password
-		ok, err := d.FindUser(ctx, username, password)
+		ok, err := dao.FindUser(ctx, username, password)
 
 		if err != nil {
 			log.Fatal(err)
-			errors.MakeUnathorisedErrorResponse(&w, "fuck mongo")
+			errors.MakeUnathorisedErrorResponse(&w, "smth wrong with db")
 			return
 		}
 		if !ok {
 
-			errors.MakeUnathorisedErrorResponse(&w, "fuck you")
+			errors.MakeUnathorisedErrorResponse(&w, "no pass")
 			return
 		}
 

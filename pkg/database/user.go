@@ -9,24 +9,24 @@ import (
 )
 
 type User struct {
-	ID       int    `bson:"_id"`
+	ID       string `bson:"_id"`
 	Username string `bson:"username"`
 	Password string `bson:"password"`
 }
 
-func (d *Database) CreateUser(ctx context.Context, user *service.User) error {
-	_, err := d.userCollection.InsertOne(ctx, User{
-		ID:       user.ID,
-		Username: user.Username,
-		Password: user.Password,
-	})
-
-	if err != nil {
-		return fmt.Errorf("cannot insert user: %w", err)
-	}
-
-	return nil
-}
+//func (d *Database) CreateUser(ctx context.Context, user *service.User) error {
+//	_, err := d.userCollection.InsertOne(ctx, User{
+//		ID:       user.ID,
+//		Username: user.Username,
+//		Password: user.Password,
+//	})
+//
+//	if err != nil {
+//		return fmt.Errorf("cannot insert user: %w", err)
+//	}
+//
+//	return nil
+//}
 func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil

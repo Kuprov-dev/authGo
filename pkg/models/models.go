@@ -34,5 +34,10 @@ type LoginCredentials struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
 }
+type UserDB struct {
+	ID       string `bson:"_id"`
+	Username string `bson:"username"`
+	Password string `bson:"password"`
+}
 
 // TODO separate models and schemes

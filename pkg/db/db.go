@@ -2,6 +2,7 @@ package db
 
 import (
 	"auth_service/pkg/models"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 //create database search for searching users and generate uuid
@@ -12,6 +13,17 @@ type UserDAO interface {
 }
 
 var Users map[string]*models.User
+
+type Config struct {
+	DBName  string
+	ConnStr string
+}
+
+type Database struct {
+	db             *mongo.Database
+	client         *mongo.Client
+	userCollection *mongo.Collection
+}
 
 func init() {
 	Users = map[string]*models.User{
