@@ -41,6 +41,9 @@ func (dao *MongoDBTempDAO) FindUser(ctx context.Context, username string, passwo
 		res = append(res, usr)
 	}
 	fmt.Println(res)
+	if len(res) == 0 {
+		return false, fmt.Errorf("cannot decode user: %w", "no user")
+	}
 	isUser := CheckPasswordHash(password, res[0].Password)
 	return isUser, nil
 }

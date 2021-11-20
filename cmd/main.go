@@ -71,7 +71,7 @@ func main() {
 	go func() {
 		if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Println(err)
-			return
+
 		}
 	}()
 

@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 )
@@ -29,14 +28,13 @@ func SignInHandler(config *conf.Config, userDAO db.UserDAO, ctx context.Context,
 		ok, err := dao.FindUser(ctx, username, password)
 
 		if err != nil {
-			log.Fatal(err)
+			//log.Fatal(err)
 			errors.MakeUnathorisedErrorResponse(&w, "smth wrong with db")
-			return
 		}
 		if !ok {
 
 			errors.MakeUnathorisedErrorResponse(&w, "no pass")
-			return
+
 		}
 
 		accessToken, accessExpirationTime, err := jwt.CreateAccessToken(username, config.SecretKeyAccess)

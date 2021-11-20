@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +17,7 @@ import (
 func TestSignInHandler(t *testing.T) {
 
 	config := conf.New()
+	log.Println(config)
 	userDAO := db.InMemroyUserDAO{}
 	users := &db.Users
 	password, _ := HashPassword("password")
@@ -28,7 +30,7 @@ func TestSignInHandler(t *testing.T) {
 
 	b := new(bytes.Buffer)
 	err := json.NewEncoder(b).Encode(models.LoginCredentials{
-		Username: "testuser",
+		Username: "user1",
 		Password: "password",
 	})
 
