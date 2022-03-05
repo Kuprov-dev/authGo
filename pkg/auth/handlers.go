@@ -29,6 +29,7 @@ func SignInHandler(config *conf.Config, userDAO db.UserDAO, ctx context.Context,
 
 		if err != nil {
 			//log.Fatal(err)
+
 			errors.MakeUnathorisedErrorResponse(&w, "smth wrong with db")
 		}
 		if !ok {
@@ -64,6 +65,7 @@ func SignInHandler(config *conf.Config, userDAO db.UserDAO, ctx context.Context,
 			Expires:  refreshExpirationTime,
 			HttpOnly: true,
 		})
+		//w.WriteHeader(200);
 	}
 }
 
